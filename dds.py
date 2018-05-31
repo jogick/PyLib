@@ -39,29 +39,35 @@ class DDS(object):
 		self.__m_sin = []
 		
 		u_max = int((((0xff+1)**self.__sampwidth)-1)/2*float(self.__level)/100)
-		offset = (((0xff+1)**self.__sampwidth)-1)/2
+#		offset = (((0xff+1)**self.__sampwidth)-1)/2
 
 		for i in range(0, self.__len_table + 1): # заполнение таблицы синуса
 			d = 2*math.pi/360*i/(self.__len_table/360)
 			
-			s = int((math.sin(d) * u_max) + offset)
+			s = int((math.sin(d) * u_max))
 			self.__m_sin.append(s)
 
 	def __generate(self):
 		n = 0
 		self.Wave = []
 		
-		dsin = float(self.__freq) / self.__framerate * self.__len_table	# вычисление приращения одного шага
-		i = self.__phase/360.0 * self.__len_table							# задаём начальный сдвиг фазы
-		if i > self.__len_table: i -= self.__len_table
+		dsin = float(self.__freq) / self.__framerate * self.__len_table			# вычисление приращения одного шага
+		i = self.__phase/360.0 * self.__len_table								# задаём начальный сдвиг фазы
+		while i >= self.__len_table: 
+			i -= self.__len_table
 
-		while (n < int(self.__time * self.__framerate)/1000):				# формирование выходного массива
+		while (n < int(self.__time * self.__framerate)/1000):					# формирование выходного массива
 			d = self.__m_sin[int(i)]
 			self.Wave.append(d)
 			i += dsin
 			if i > self.__len_table:
 				i -= self.__len_table
 			n += 1
+			
+		i += dsin																# корректируем фазу для дальнейшего плавного соединения двух волн
+		self.__phase = int(i / self.__len_table * 360.0)
+		while self.__phase > 360:
+			self.__phase -= 360
 	
 	@property
 	def freq(self):
@@ -93,6 +99,8 @@ class DDS(object):
 		'''
 		try:
 			self.__level = abs(int(lvl))
+			if self.__level > 100:
+				self.__level = 100
 			self.__generate_table()
 			self.__generate()
 		except:
@@ -125,6 +133,9 @@ class DDS(object):
 	def framerate(self, fr):
 		'''
 		Установить частоту дискретизации
+		Типовой ряд: 8000, 11025, 16000, 22050, 32000,
+		44100, 48000, 88200, 96000, 176400, 192000,
+		352800, 384000
 		'''
 		try:
 			self.__framerate = abs(int(fr))
@@ -139,6 +150,8 @@ class DDS(object):
 	def phase(self, ph):
 		try:
 			self.__phase = abs(int(ph))
+			while (self.__phase > self.__len_table):
+				self.__phase -= self.__len_table
 			self.__generate()
 		except:
 			pass
@@ -154,4 +167,17 @@ class DDS(object):
 			self.__generate()
 		except:
 			pass
-	
+	@property
+	def as_str(self):
+		'''
+		Список значений сигнала в симовольном представлении
+		для модуля wave
+		'''
+		s=[]
+		a = len(self.Wave)
+
+		for i in self.Wave:
+			for ii in range(self.__sampwidth):
+				a = (i & 0xFF<<8*ii)>>8*ii
+				s.append(a)
+		return bytes(s)
